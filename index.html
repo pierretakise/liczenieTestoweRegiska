@@ -1,0 +1,828 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#2e9e6b" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#1a1714" media="(prefers-color-scheme: dark)">
+<!-- iOS: pełny ekran po „Dodaj do ekranu początkowego" (działa też z zakładki data URL) -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Karma kota">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>Karma dla kota — Cats Plate</title>
+<script>
+  // Motyw: zastosuj zapisany wybór jak najwcześniej (bez mignięcia przy starcie).
+  // Przechowujemy preferencję (auto/light/dark); „auto" rozwiązujemy wg systemu.
+  try {
+    var _pref = localStorage.getItem('karmaKota.theme') || 'auto';
+    var _dark = _pref === 'dark' ||
+      (_pref === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    document.documentElement.setAttribute('data-theme', _dark ? 'dark' : 'light');
+  } catch (e) {}
+</script>
+<style>
+  :root {
+    --bg: #faf7f2;
+    --card: #ffffff;
+    --ink: #3a352f;
+    --muted: #8a8178;
+    --accent: #2e9e6b;
+    --accent-ink: #1f6e49;
+    --accent-soft: #e7f4ec;
+    --warn: #b9751a;
+    --warn-soft: #fbf0dd;
+    --danger: #c0392b;
+    --danger-soft: #fbe7e4;
+    --line: #ece6dd;
+    --radius: 16px;
+    --shadow: 0 1px 3px rgba(60,50,40,.07), 0 6px 20px rgba(60,50,40,.05);
+  }
+  /* Ciemny motyw — sterowany atrybutem data-theme (JS rozwiązuje „auto" wg systemu). */
+  :root[data-theme="dark"] {
+    --bg: #1a1714;
+    --card: #241f1b;
+    --ink: #ece6dd;
+    --muted: #9a8f83;
+    --accent: #3fb985;
+    --accent-ink: #6fd6a6;
+    --accent-soft: #1e3a2d;
+    --warn: #e0a64e;
+    --warn-soft: #3a2f1c;
+    --danger: #e8796b;
+    --danger-soft: #3a221f;
+    --line: #352e28;
+    --shadow: 0 1px 3px rgba(0,0,0,.3), 0 6px 20px rgba(0,0,0,.25);
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif;
+    margin: 0 auto;
+    padding: calc(14px + env(safe-area-inset-top)) calc(14px + env(safe-area-inset-right))
+             calc(28px + env(safe-area-inset-bottom)) calc(14px + env(safe-area-inset-left));
+    background: var(--bg); color: var(--ink);
+    max-width: 620px;
+    font-size: 16px; line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  .tnum { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+  h1 {
+    font-size: 1.4em; font-weight: 800; letter-spacing: -.01em;
+    margin: 4px 0 16px; display: flex; align-items: center; gap: 8px;
+  }
+  .card {
+    background: var(--card); padding: 16px;
+    border-radius: var(--radius); margin-bottom: 12px;
+    box-shadow: var(--shadow);
+  }
+  label.head {
+    display: block; font-weight: 700; margin-bottom: 4px; font-size: 1.02em;
+  }
+  .hint { color: var(--muted); font-size: 0.85em; margin-bottom: 10px; }
+  input[type="number"], select {
+    font-size: 16px; padding: 11px 12px;
+    border: 1.5px solid var(--line); border-radius: 11px;
+    background: var(--card); color: var(--ink);
+    max-width: 100%; transition: border-color .15s;
+  }
+  input[type="number"]:focus, select:focus {
+    outline: none; border-color: var(--accent);
+  }
+  select {
+    -webkit-appearance: menulist; appearance: menulist;
+    cursor: pointer; -webkit-tap-highlight-color: rgba(0,0,0,0.06);
+  }
+  input.short { width: 120px; }
+  .goal { display: flex; gap: 18px; flex-wrap: wrap; align-items: flex-end; }
+  .goal .field { display: flex; flex-direction: column; gap: 6px; }
+  .goal .field label { font-size: .82em; color: var(--muted); font-weight: 600; }
+  .goal input { width: 110px; }
+  .dayinfo {
+    flex-basis: 100%; margin: 6px 0 0; font-size: .85em; font-weight: 600;
+    color: var(--accent-ink); background: var(--accent-soft);
+    padding: 8px 11px; border-radius: 10px; line-height: 1.4;
+  }
+  .dayinfo.hidden { display: none; }
+  .chips { display: flex; gap: 6px; margin-top: 4px; flex-wrap: wrap; }
+  .chip {
+    font-size: 14px; padding: 6px 12px; border-radius: 999px;
+    border: 1.5px solid var(--line); background: var(--card); color: var(--muted);
+    cursor: pointer; font-family: inherit; font-weight: 600;
+    transition: background .15s, color .15s, border-color .15s;
+    -webkit-tap-highlight-color: rgba(0,0,0,0.06);
+  }
+  .chip:active { filter: brightness(.94); }
+  .chip.active {
+    background: var(--accent-soft); color: var(--accent-ink); border-color: var(--accent);
+  }
+  .row {
+    display: flex; gap: 8px; margin-bottom: 9px;
+    align-items: center; flex-wrap: wrap;
+  }
+  .row select { flex: 1 1 58%; min-width: 160px; padding: 9px 10px; }
+  .row input { width: 84px; padding: 9px; text-align: right; }
+  .row .kcal {
+    min-width: 78px; color: var(--accent-ink); font-size: 0.88em; font-weight: 600;
+    flex: 0 0 auto;
+  }
+  .row .arrow { color: var(--muted); }
+  button {
+    font-size: 15px; padding: 10px 15px;
+    border: 0; border-radius: 11px; cursor: pointer;
+    font-family: inherit; transition: filter .15s, background .15s;
+  }
+  button:active { filter: brightness(.94); }
+  button.add { background: var(--accent); color: #fff; font-weight: 600; }
+  button.del { background: var(--danger-soft); color: var(--danger); padding: 8px 11px; }
+  button.move { background: var(--accent-soft); color: var(--accent-ink); padding: 8px 10px; }
+  button.copy { background: var(--accent-soft); color: var(--accent-ink); font-weight: 600; margin-top: 12px; }
+  button.copy:disabled { opacity: .45; cursor: default; }
+  .theme-btn {
+    margin-left: auto; flex: 0 0 auto;
+    width: 40px; height: 40px; padding: 0; font-size: 19px; line-height: 1;
+    background: var(--card); color: var(--ink);
+    border: 1.5px solid var(--line); border-radius: 999px;
+  }
+  /* Zapas (spiżarnia) */
+  .zrow {
+    display: flex; align-items: center; gap: 10px;
+    padding: 7px 0; border-bottom: 1px solid var(--line);
+  }
+  .zrow:last-child { border-bottom: 0; }
+  .zrow .zname { flex: 1 1 auto; }
+  .zrow .jarsize { color: var(--muted); font-size: .82em; font-weight: 500; }
+  #zapasDni.low { color: var(--warn); font-weight: 700; }
+  /* Wspólny zapas (gospodarstwo) */
+  .dom { background: var(--accent-soft); border-radius: 12px; padding: 11px; margin-bottom: 14px; }
+  .domlabel { display: block; font-weight: 700; font-size: .9em; margin-bottom: 7px; color: var(--accent-ink); }
+  .domrow { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .domrow input { flex: 1 1 170px; min-width: 0; padding: 9px 10px; font-size: 14px; }
+  .domStatus { font-size: .82em; color: var(--muted); margin-top: 8px; }
+  .domStatus.ok { color: var(--accent-ink); font-weight: 600; }
+  .domStatus.warn { color: var(--warn); font-weight: 600; }
+  .zrow .zctrl { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
+  .zrow input { width: 60px; text-align: center; padding: 8px 6px; }
+  button.step {
+    background: var(--accent-soft); color: var(--accent-ink);
+    width: 40px; padding: 9px 0; font-weight: 700; font-size: 18px; line-height: 1;
+  }
+  .sum { color: var(--ink); font-weight: 600; margin-top: 12px; }
+  .result {
+    font-size: 1.5em; font-weight: 800; color: var(--accent-ink);
+    margin-top: 2px; letter-spacing: -.01em;
+  }
+  .result .sub { display: block; font-size: .58em; font-weight: 600; color: var(--muted); margin-top: 2px; }
+  .result.warn { color: var(--danger); }
+  .result.muted { color: var(--muted); font-weight: 600; font-size: 1.02em; }
+  .total { color: var(--muted); margin-top: 10px; font-size: 0.9em; font-weight: 600; }
+  /* posiłki */
+  .meal {
+    display: flex; gap: 10px; align-items: baseline;
+    padding: 9px 0; border-bottom: 1px solid var(--line);
+  }
+  .meal:last-child { border-bottom: 0; }
+  .meal-no { flex: 0 0 auto; font-weight: 700; color: var(--accent-ink); min-width: 108px; }
+  .meal-body { flex: 1 1 auto; }
+  .meal-kcal { color: var(--muted); font-weight: 600; }
+  .meal-empty { color: var(--muted); }
+</style>
+</head>
+<body>
+
+<h1>🐾 Karma dla kota
+  <button type="button" id="themeBtn" class="theme-btn" title="Motyw">🖥</button>
+</h1>
+
+<div class="card">
+  <div class="goal">
+    <div class="field">
+      <label for="target">Cel — kcal na dzień</label>
+      <input type="number" id="target" class="short tnum" value="250" min="0" inputmode="decimal">
+      <div class="chips" id="targetChips"></div>
+    </div>
+    <div class="field">
+      <label for="meals">Liczba posiłków</label>
+      <input type="number" id="meals" class="short tnum" value="4" min="1" step="1" inputmode="numeric">
+    </div>
+    <div class="field">
+      <label for="served">Podane dziś</label>
+      <input type="number" id="served" class="short tnum" value="" min="0" step="1" placeholder="0" inputmode="numeric">
+    </div>
+    <div class="dayinfo hidden" id="dayInfo"></div>
+  </div>
+</div>
+
+<div class="card">
+  <label class="head">🥣 Stałe porcje</label>
+  <div class="hint">Resztki słoików / znana ilość. Pomiń, jeśli wszystko ma być z jednej karmy.</div>
+  <div id="rows"></div>
+  <button class="add" onclick="addRow()">+ Dodaj porcję</button>
+  <div class="sum tnum" id="staleSum">Razem stałe:  0 g  ·  0 kcal</div>
+</div>
+
+<div class="card">
+  <label class="head">➕ Karma do dopełnienia</label>
+  <div class="hint">Zostanie dosypana tak, by zejść z dziennym celem kcal.</div>
+  <select id="fill" style="width:100%;">
+    <option value="">— wybierz karmę —</option>
+  </select>
+</div>
+
+<div class="card">
+  <label class="head">Należy dosypać</label>
+  <div class="result muted tnum" id="result">(wpisz docelową ilość kcal)</div>
+  <div class="total tnum" id="total">Łącznie dziennie:  0 g  ·  0 kcal</div>
+</div>
+
+<div class="card">
+  <label class="head">🍽 Plan posiłków</label>
+  <div class="hint">Posiłki równe kalorycznie. Słoiki w kolejności wierszy (strzałkami zmieniasz kolejność).</div>
+  <div id="meals_out"><div class="meal-empty">—</div></div>
+  <button type="button" class="copy" id="copyBtn" disabled>📋 Kopiuj plan</button>
+</div>
+
+<div class="card">
+  <label class="head">📦 Zapas (spiżarnia)</label>
+  <div class="hint">Ile słoików każdego smaku masz w szafce.</div>
+  <div class="dom">
+    <label class="domlabel" for="domKod">🔗 Wspólny zapas — kod gospodarstwa</label>
+    <div class="domrow">
+      <input type="text" id="domKod" placeholder="(pusto = tylko ten telefon)" autocomplete="off" spellcheck="false">
+      <button type="button" class="move" id="domGen" title="Wygeneruj nowy kod">Generuj</button>
+      <button type="button" class="move" id="domCopy" title="Kopiuj kod">Kopiuj</button>
+    </div>
+    <div class="domStatus" id="domStatus">Tryb lokalny — wpisz lub wygeneruj kod, by współdzielić z domownikiem.</div>
+  </div>
+  <div id="zapas"></div>
+  <div class="sum tnum" id="zapasSum">Razem: 0 słoików</div>
+  <div class="total tnum" id="zapasDni">Spiżarnia pusta.</div>
+</div>
+
+<script>
+const KARMY = {
+  "Cats Plate Beef (wołowina)":         110,
+  "Cats Plate Duck (kaczka)":           107,
+  "Cats Plate Goose Mousse (gęś)":      151,
+  "Cats Plate Horse (konina)":          132,
+  "Cats Plate Lamb (jagnięcina)":       120,
+  "Cats Plate Pork (wieprzowina)":      137,
+  "Cats Plate Rabbit (królik)":         104,
+  "Cats Plate Salmon Mousse (łosoś)":   166,
+  "Cats Plate Turkey (indyk)":           98,
+  "Cats Plate Venison (sarnina)":       105,
+  // Koci Katering (inna firma): stała porcja 157 g = 253 kcal, jednakowa dla każdego smaku
+  "Koci Katering (dowolny smak)":       253 / 157 * 100,  // ≈ 161.1 kcal/100 g
+};
+
+// Emoji per smak — czytelność „na ikonę", zero kosztu, działa we wszystkich systemach.
+const EMOJI = {
+  "Cats Plate Beef (wołowina)":       "🥩",
+  "Cats Plate Duck (kaczka)":         "🦆",
+  "Cats Plate Goose Mousse (gęś)":    "🦢",
+  "Cats Plate Horse (konina)":        "🐴",
+  "Cats Plate Lamb (jagnięcina)":     "🐑",
+  "Cats Plate Pork (wieprzowina)":    "🐷",
+  "Cats Plate Rabbit (królik)":       "🐰",
+  "Cats Plate Salmon Mousse (łosoś)": "🐟",
+  "Cats Plate Turkey (indyk)":        "🦃",
+  "Cats Plate Venison (sarnina)":     "🦌",
+  "Koci Katering (dowolny smak)":     "🍱",
+};
+function emo(k) { return EMOJI[k] || "🍽"; }
+
+// Gramatura słoika per smak (źródło: zapisane strony produktowe Cats Plate *.htm;
+// Koci Katering 157 g wg KONTEKST). Potrzebne do „na ile starczy zapas".
+const JAR_G = {
+  "Cats Plate Beef (wołowina)":         360,
+  "Cats Plate Duck (kaczka)":           360,
+  "Cats Plate Goose Mousse (gęś)":      100,
+  "Cats Plate Horse (konina)":          180,
+  "Cats Plate Lamb (jagnięcina)":       360,
+  "Cats Plate Pork (wieprzowina)":      360,
+  "Cats Plate Rabbit (królik)":         360,
+  "Cats Plate Salmon Mousse (łosoś)":   100,
+  "Cats Plate Turkey (indyk)":          360,
+  "Cats Plate Venison (sarnina)":       180,
+  "Koci Katering (dowolny smak)":       157,
+};
+
+const fillSel = document.getElementById('fill');
+for (const k of Object.keys(KARMY)) {
+  const opt = document.createElement('option');
+  opt.value = k; opt.textContent = emo(k) + '  ' + k;
+  fillSel.appendChild(opt);
+}
+
+function shortName(k) { return k.split(' (')[0]; }
+function fmt(n) { return n.toFixed(1).replace('.', ','); }
+
+function splitIntoMeals(plan, nMeals) {
+  if (nMeals < 1 || !plan.length) return [];
+  const totalKcal = plan.reduce((s, p) => s + p.g * KARMY[p.karma] / 100, 0);
+  if (totalKcal < 0.05) return [];
+  const target = totalKcal / nMeals;
+  const queue = plan.map(p => ({karma: p.karma, g: p.g}));
+  const meals = [];
+  for (let i = 0; i < nMeals; i++) {
+    const isLast = (i === nMeals - 1);
+    const meal = [];
+    let remaining = target;
+    while (queue.length && (remaining > 0.05 || isLast)) {
+      const item = queue[0];
+      if (item.g < 0.01) { queue.shift(); continue; }
+      const kcalInJar = item.g * KARMY[item.karma] / 100;
+      if (isLast || kcalInJar <= remaining + 0.05) {
+        meal.push({karma: item.karma, g: item.g, kcal: kcalInJar});
+        if (!isLast) remaining -= kcalInJar;
+        queue.shift();
+      } else {
+        const gTake = remaining * 100 / KARMY[item.karma];
+        meal.push({karma: item.karma, g: gTake, kcal: remaining});
+        item.g -= gTake;
+        remaining = 0;
+      }
+    }
+    meals.push(meal);
+  }
+  return meals;
+}
+
+function mergeMeal(meal) {
+  const merged = [];
+  for (const c of meal) {
+    const last = merged[merged.length - 1];
+    if (last && last.karma === c.karma) {
+      last.g += c.g; last.kcal += c.kcal;
+    } else {
+      merged.push({karma: c.karma, g: c.g, kcal: c.kcal});
+    }
+  }
+  return merged;
+}
+
+function renderMeals(meals, offset = 0) {
+  const out = document.getElementById('meals_out');
+  if (!meals.length) { out.innerHTML = '<div class="meal-empty">—</div>'; return; }
+  out.innerHTML = meals.map((meal, idx) => {
+    const i = idx + 1 + offset;
+    const no = `<span class="meal-no">🍽 Posiłek ${i}</span>`;
+    if (!meal.length) return `<div class="meal">${no}<span class="meal-body meal-empty">—</span></div>`;
+    const merged = mergeMeal(meal);
+    const body = merged.map(c => `${emo(c.karma)} ${fmt(c.g)} g ${shortName(c.karma)}`).join(' + ');
+    const tot = merged.reduce((s, c) => s + c.kcal, 0);
+    return `<div class="meal">${no}<span class="meal-body tnum">${body} `
+         + `<span class="meal-kcal">· ${fmt(tot)} kcal</span></span></div>`;
+  }).join('');
+}
+
+function moveRow(div, direction) {
+  const rowsDiv = document.getElementById('rows');
+  if (direction === -1 && div.previousElementSibling) {
+    rowsDiv.insertBefore(div, div.previousElementSibling);
+  } else if (direction === 1 && div.nextElementSibling) {
+    rowsDiv.insertBefore(div.nextElementSibling, div);
+  }
+  recalc();
+}
+
+function addRow(karma, grams, noFocus) {
+  const rowsDiv = document.getElementById('rows');
+  const div = document.createElement('div');
+  div.className = 'row';
+
+  const sel = document.createElement('select');
+  const optEmpty = document.createElement('option');
+  optEmpty.value = ''; optEmpty.textContent = '— karma —';
+  sel.appendChild(optEmpty);
+  for (const k of Object.keys(KARMY)) {
+    const opt = document.createElement('option');
+    opt.value = k; opt.textContent = emo(k) + '  ' + k;
+    sel.appendChild(opt);
+  }
+  if (karma) sel.value = karma;
+  sel.addEventListener('change', recalc);
+
+  const inp = document.createElement('input');
+  inp.type = 'number'; inp.step = '0.1'; inp.min = '0';
+  inp.placeholder = 'g'; inp.inputMode = 'decimal'; inp.className = 'tnum';
+  if (grams) inp.value = grams;
+  inp.addEventListener('input', recalc);
+
+  const arrow = document.createElement('span');
+  arrow.className = 'arrow'; arrow.textContent = 'g →';
+
+  const kcal = document.createElement('span');
+  kcal.className = 'kcal tnum'; kcal.textContent = '—';
+
+  const up = document.createElement('button');
+  up.className = 'move'; up.textContent = '▲'; up.title = 'W górę';
+  up.addEventListener('click', () => moveRow(div, -1));
+
+  const down = document.createElement('button');
+  down.className = 'move'; down.textContent = '▼'; down.title = 'W dół';
+  down.addEventListener('click', () => moveRow(div, 1));
+
+  const del = document.createElement('button');
+  del.className = 'del'; del.textContent = '✕';
+  del.addEventListener('click', () => { div.remove(); recalc(); });
+
+  div.appendChild(sel);
+  div.appendChild(inp);
+  div.appendChild(arrow);
+  div.appendChild(kcal);
+  div.appendChild(up);
+  div.appendChild(down);
+  div.appendChild(del);
+  div._sel = sel; div._inp = inp; div._kcal = kcal;
+
+  rowsDiv.appendChild(div);
+  if (!noFocus) inp.focus();
+  recalc();
+}
+
+// copyBtn / lastPlanText — obsługa „Kopiuj plan".
+// (Zapamiętywanie pól kalkulatora po odświeżeniu WYCOFANE — do decyzji Kuby.
+//  Zapas „spiżarnia" ma własną pamięć lokalną — patrz niżej.)
+const copyBtn = document.getElementById('copyBtn');
+let lastPlanText = '';
+
+// ── Tekst planu do skopiowania (np. dla domownika karmiącego kota) ────
+function updatePlanText(meals, offset, ctx) {
+  const lines = ['🐾 Plan karmienia kota'];
+  if (ctx.target > 0) lines.push(`Cel: ${fmt(ctx.target)} kcal / ${ctx.nMeals} posiłki`);
+  if (ctx.inDay && !ctx.allServed) lines.push(`(reszta dnia — ${ctx.effMeals} posiłki)`);
+  if (!meals.length) {
+    lines.push('—');
+  } else {
+    meals.forEach((meal, idx) => {
+      const i = idx + 1 + offset;
+      if (!meal.length) { lines.push(`Posiłek ${i}: —`); return; }
+      const merged = mergeMeal(meal);
+      const body = merged.map(c => `${emo(c.karma)} ${fmt(c.g)} g ${shortName(c.karma)}`).join(' + ');
+      const tot = merged.reduce((s, c) => s + c.kcal, 0);
+      lines.push(`Posiłek ${i}: ${body} · ${fmt(tot)} kcal`);
+    });
+  }
+  lastPlanText = lines.join('\n');
+  copyBtn.disabled = !meals.length;
+}
+
+function recalc() {
+  const targetRaw = document.getElementById('target').value.replace(',', '.');
+  const target = parseFloat(targetRaw);
+
+  // Tryb „w trakcie dnia": ile posiłków już podano. Puste/0 → standardowy flow.
+  // Posiłki są równe kalorycznie, więc N podanych = N/posiłki celu już zjedzone;
+  // planujemy tylko resztę dnia (proporcjonalnie mniej kcal, mniej posiłków).
+  const nMealsRaw = parseInt(document.getElementById('meals').value);
+  const nMeals = (nMealsRaw >= 1) ? nMealsRaw : 0;
+  const servedRaw = parseInt(document.getElementById('served').value);
+  const served = (servedRaw > 0) ? servedRaw : 0;
+  const inDay = served > 0 && nMeals >= 1;
+  const allServed = inDay && served >= nMeals;
+  const effMeals = inDay ? Math.max(0, nMeals - served) : nMeals;
+  const effTarget = (inDay && nMeals >= 1) ? target * effMeals / nMeals : target;
+
+  const dayInfo = document.getElementById('dayInfo');
+  if (inDay && !allServed) {
+    dayInfo.classList.remove('hidden');
+    dayInfo.textContent =
+      `🐾 W trakcie dnia: plan na pozostałe ${effMeals} z ${nMeals} posiłków`
+      + (target > 0 ? ` · ${fmt(effTarget)} z ${fmt(target)} kcal` : '')
+      + ` (zakłada podane ${served} wg planu)`;
+  } else if (allServed) {
+    dayInfo.classList.remove('hidden');
+    dayInfo.textContent = `🐾 Wszystkie ${nMeals} posiłki już podane — dzień zamknięty.`;
+  } else {
+    dayInfo.classList.add('hidden');
+  }
+
+  const plan = [];
+  document.querySelectorAll('#rows .row').forEach(div => {
+    const k = div._sel.value;
+    const g = parseFloat(div._inp.value.replace(',', '.'));
+    if (k && g > 0 && KARMY[k]) {
+      const kcal = g * KARMY[k] / 100;
+      div._kcal.textContent = fmt(kcal) + ' kcal';
+      plan.push({karma: k, g: g});
+    } else {
+      div._kcal.textContent = '—';
+    }
+  });
+
+  const sumG = plan.reduce((s, p) => s + p.g, 0);
+  const sumKcal = plan.reduce((s, p) => s + p.g * KARMY[p.karma] / 100, 0);
+
+  document.getElementById('staleSum').textContent =
+    `Razem stałe:  ${fmt(sumG)} g  ·  ${fmt(sumKcal)} kcal`;
+
+  const fillK = fillSel.value;
+  const resEl = document.getElementById('result');
+  const totalEl = document.getElementById('total');
+
+  let dailyG = sumG, dailyKcal = sumKcal;
+  resEl.className = 'result tnum';
+
+  if (allServed) {
+    resEl.classList.add('muted');
+    resEl.textContent = '✓ Wszystkie posiłki już podane';
+  } else if (!effTarget || effTarget <= 0) {
+    resEl.classList.add('muted');
+    resEl.textContent = '(wpisz docelową ilość kcal)';
+  } else {
+    const remaining = effTarget - sumKcal;
+    const celWord = inDay ? 'cel reszty dnia' : 'cel';
+    if (remaining < -0.05) {
+      resEl.classList.add('warn');
+      resEl.textContent = `Przekroczono ${celWord} o ${fmt(-remaining)} kcal`;
+    } else if (Math.abs(remaining) < 0.05) {
+      resEl.textContent = `✓ ${inDay ? 'Reszta dnia pokryta' : 'Cel osiągnięty'} stałymi porcjami`;
+      dailyKcal = effTarget;
+    } else if (!fillK || !KARMY[fillK]) {
+      resEl.classList.add('muted');
+      resEl.innerHTML = `Pozostało ${fmt(remaining)} kcal<span class="sub">wybierz karmę do dopełnienia ↑</span>`;
+    } else {
+      const gFill = remaining / KARMY[fillK] * 100;
+      plan.push({karma: fillK, g: gFill});
+      dailyG = sumG + gFill; dailyKcal = effTarget;
+      resEl.innerHTML = `${emo(fillK)} ${fmt(gFill)} g · ${shortName(fillK)}`
+                      + `<span class="sub">${fmt(remaining)} kcal do dopełnienia</span>`;
+    }
+  }
+
+  totalEl.textContent =
+    `${inDay ? 'Łącznie reszta dnia' : 'Łącznie dziennie'}:  ${fmt(dailyG)} g  ·  ${fmt(dailyKcal)} kcal`;
+
+  const mealsArr = (allServed || effMeals < 1 || !plan.length)
+    ? [] : splitIntoMeals(plan, effMeals);
+  renderMeals(mealsArr, served);
+  updatePlanText(mealsArr, served, { target, nMeals, inDay, effMeals, allServed });
+  if (typeof updateZapas === 'function') updateZapas();
+}
+
+// Szybki wybór celu kcal — chipsy wpisują wartość, pole nadal przyjmuje dowolną liczbę.
+const TARGET_PRESETS = [240, 250, 260];
+const targetEl = document.getElementById('target');
+const chipEls = [];
+const chipsBox = document.getElementById('targetChips');
+for (const v of TARGET_PRESETS) {
+  const b = document.createElement('button');
+  b.type = 'button'; b.className = 'chip tnum'; b.textContent = v + ' kcal';
+  b._val = v;
+  b.addEventListener('click', () => { targetEl.value = v; syncChips(); recalc(); });
+  chipsBox.appendChild(b);
+  chipEls.push(b);
+}
+function syncChips() {
+  const cur = parseFloat(targetEl.value.replace(',', '.'));
+  for (const b of chipEls) b.classList.toggle('active', b._val === cur);
+}
+
+targetEl.addEventListener('input', () => { syncChips(); recalc(); });
+document.getElementById('meals').addEventListener('input', recalc);
+document.getElementById('served').addEventListener('input', recalc);
+fillSel.addEventListener('change', recalc);
+
+// ── Motyw: cykl auto → jasny → ciemny ────────────────────────────────
+const THEME_KEY = 'karmaKota.theme';
+const THEME_CYCLE = ['auto', 'light', 'dark'];
+const THEME_ICON = { auto: '🖥', light: '🌞', dark: '🌙' };
+const THEME_NAME = { auto: 'systemowy', light: 'jasny', dark: 'ciemny' };
+const themeBtn = document.getElementById('themeBtn');
+const mqDark = window.matchMedia('(prefers-color-scheme: dark)');
+function getThemePref() {
+  try { return localStorage.getItem(THEME_KEY) || 'auto'; } catch (e) { return 'auto'; }
+}
+function applyTheme(pref) {
+  const dark = pref === 'dark' || (pref === 'auto' && mqDark.matches);
+  document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+  themeBtn.textContent = THEME_ICON[pref];
+  themeBtn.title = 'Motyw: ' + THEME_NAME[pref];
+}
+themeBtn.addEventListener('click', () => {
+  const next = THEME_CYCLE[(THEME_CYCLE.indexOf(getThemePref()) + 1) % THEME_CYCLE.length];
+  try { localStorage.setItem(THEME_KEY, next); } catch (e) {}
+  applyTheme(next);
+});
+if (mqDark.addEventListener) {
+  mqDark.addEventListener('change', () => { if (getThemePref() === 'auto') applyTheme('auto'); });
+}
+applyTheme(getThemePref());
+
+// ── Kopiowanie planu do schowka ──────────────────────────────────────
+function flashCopied() {
+  copyBtn.textContent = '✓ Skopiowano';
+  setTimeout(() => { copyBtn.textContent = '📋 Kopiuj plan'; }, 1500);
+}
+copyBtn.addEventListener('click', async () => {
+  if (!lastPlanText) return;
+  try {
+    await navigator.clipboard.writeText(lastPlanText);
+    flashCopied();
+  } catch (e) {
+    const ta = document.createElement('textarea');
+    ta.value = lastPlanText;
+    ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.focus(); ta.select();
+    try { document.execCommand('copy'); flashCopied(); } catch (_) {}
+    ta.remove();
+  }
+});
+
+// ── Zapas (spiżarnia) — ile słoików czego mamy. ──────────────────────
+// Pamięć lokalna (cache offline) + opcjonalna synchronizacja z domownikiem
+// przez Supabase (gdy ustawiony „kod gospodarstwa" — patrz blok chmury niżej).
+const ZAPAS_KEY = 'karmaKota.zapas.v1';
+const zapasBox = document.getElementById('zapas');
+const zapasSumEl = document.getElementById('zapasSum');
+const zapasDniEl = document.getElementById('zapasDni');
+const zapasInputs = {};
+let zapasData = {};
+try { zapasData = JSON.parse(localStorage.getItem(ZAPAS_KEY)) || {}; } catch (e) { zapasData = {}; }
+
+function saveZapas() {
+  try { localStorage.setItem(ZAPAS_KEY, JSON.stringify(zapasData)); } catch (e) {}
+}
+function sloikiWord(n) {
+  n = Math.abs(n);
+  if (n === 1) return 'słoik';
+  const t = n % 10, h = n % 100;
+  return (t >= 2 && t <= 4 && !(h >= 12 && h <= 14)) ? 'słoiki' : 'słoików';
+}
+function updateZapas() {
+  let jars = 0, grams = 0, kcal = 0;
+  for (const k of Object.keys(KARMY)) {
+    const n = Number(zapasData[k]) || 0;
+    if (n <= 0) continue;
+    jars  += n;
+    grams += n * JAR_G[k];
+    kcal  += n * JAR_G[k] * KARMY[k] / 100;
+  }
+  zapasSumEl.textContent =
+    `Razem: ${jars} ${sloikiWord(jars)}  ·  ${fmt(grams)} g  ·  ${fmt(kcal)} kcal`;
+
+  const target = parseFloat((document.getElementById('target').value || '').replace(',', '.'));
+  zapasDniEl.classList.remove('low');
+  if (jars <= 0) {
+    zapasDniEl.textContent = 'Spiżarnia pusta.';
+  } else if (!target || target <= 0) {
+    zapasDniEl.textContent = 'Wpisz cel kcal/dzień, by oszacować na ile starczy.';
+  } else {
+    const whole = Math.floor(kcal / target);
+    const low = whole <= 3;
+    zapasDniEl.classList.toggle('low', low);
+    zapasDniEl.textContent =
+      `Wystarczy na ≈ ${whole} ${whole === 1 ? 'dzień' : 'dni'} (przy ${fmt(target)} kcal/dzień).`
+      + (low ? ' ⚠️ Czas zamówić.' : '');
+  }
+}
+for (const k of Object.keys(KARMY)) {
+  const row = document.createElement('div'); row.className = 'zrow';
+  const name = document.createElement('span'); name.className = 'zname';
+  name.innerHTML = `${emo(k)} ${shortName(k)} <span class="jarsize">· ${JAR_G[k]} g/słoik</span>`;
+  const ctrl = document.createElement('div'); ctrl.className = 'zctrl';
+  const minus = document.createElement('button');
+  minus.type = 'button'; minus.className = 'step'; minus.textContent = '−'; minus.title = 'Mniej';
+  const inp = document.createElement('input');
+  inp.type = 'number'; inp.min = '0'; inp.step = '1'; inp.inputMode = 'numeric'; inp.className = 'tnum';
+  inp.value = (zapasData[k] > 0) ? zapasData[k] : '';
+  zapasInputs[k] = inp;
+  const plus = document.createElement('button');
+  plus.type = 'button'; plus.className = 'step'; plus.textContent = '+'; plus.title = 'Więcej';
+  const setVal = (v) => {
+    v = Math.max(0, v);
+    zapasData[k] = v;
+    inp.value = v > 0 ? v : '';
+    saveZapas(); updateZapas(); scheduleCloudSave();
+  };
+  minus.addEventListener('click', () => setVal((parseInt(inp.value) || 0) - 1));
+  plus.addEventListener('click', () => setVal((parseInt(inp.value) || 0) + 1));
+  inp.addEventListener('input', () => {
+    zapasData[k] = Math.max(0, parseInt(inp.value) || 0);
+    saveZapas(); updateZapas(); scheduleCloudSave();
+  });
+  ctrl.appendChild(minus); ctrl.appendChild(inp); ctrl.appendChild(plus);
+  row.appendChild(name); row.appendChild(ctrl);
+  zapasBox.appendChild(row);
+}
+updateZapas();
+
+// ── Wspólny zapas między domownikami (Supabase, czysty fetch — bez biblioteki) ──
+// Klucz anon jest PUBLICZNY z założenia; ochronę robi schemat (RLS + funkcje
+// filtrujące po kodzie). Pusty „kod gospodarstwa" = tryb lokalny (jak dotąd).
+const SB_URL = 'https://crclqrunjepjpjgaxzjp.supabase.co';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNyY2xxcnVuamVwanBqZ2F4empwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE4NjIyMTcsImV4cCI6MjA5NzQzODIxN30.OsVtBRffKaLrN3qa--B_3EzplytL2X9CwI6zWMvE04U';
+const DOM_KEY = 'karmaKota.dom';
+const domInput = document.getElementById('domKod');
+const domStatusEl = document.getElementById('domStatus');
+const domGenBtn = document.getElementById('domGen');
+const domCopyBtn = document.getElementById('domCopy');
+let domCode = '';
+try { domCode = localStorage.getItem(DOM_KEY) || ''; } catch (e) {}
+domInput.value = domCode;
+
+const cloudEnabled = () => !!(SB_URL && SB_KEY && domCode);
+function setDomStatus(msg, kind) {
+  domStatusEl.textContent = msg;
+  domStatusEl.className = 'domStatus' + (kind ? ' ' + kind : '');
+}
+function refreshZapasInputs() {
+  for (const k of Object.keys(KARMY)) {
+    if (zapasInputs[k]) zapasInputs[k].value = (Number(zapasData[k]) > 0) ? zapasData[k] : '';
+  }
+  updateZapas();
+}
+async function cloudGet(code) {
+  const r = await fetch(`${SB_URL}/rest/v1/rpc/karma_get`, {
+    method: 'POST',
+    headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ p_code: code }),
+  });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  return await r.json();
+}
+async function cloudSet(code, data) {
+  const r = await fetch(`${SB_URL}/rest/v1/rpc/karma_set`, {
+    method: 'POST',
+    headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ p_code: code, p_data: data }),
+  });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+}
+let cloudSaveTimer = null;
+function scheduleCloudSave() {
+  if (!cloudEnabled()) return;
+  setDomStatus('Zapisywanie…');
+  clearTimeout(cloudSaveTimer);
+  cloudSaveTimer = setTimeout(async () => {
+    try { await cloudSet(domCode, zapasData); setDomStatus('Zsynchronizowano ✓', 'ok'); }
+    catch (e) { setDomStatus('Offline — zapis lokalny, zsynchronizuje przy połączeniu', 'warn'); }
+  }, 700);
+}
+async function cloudLoad() {
+  if (!cloudEnabled()) {
+    setDomStatus('Tryb lokalny — wpisz lub wygeneruj kod, by współdzielić z domownikiem.');
+    return;
+  }
+  setDomStatus('Ładowanie wspólnego zapasu…');
+  try {
+    const data = await cloudGet(domCode);
+    if (data && typeof data === 'object') {
+      zapasData = data; saveZapas(); refreshZapasInputs();
+      setDomStatus('Zsynchronizowano ✓', 'ok');
+    } else {
+      await cloudSet(domCode, zapasData);   // nowy kod → wgraj bieżący zapas
+      setDomStatus('Utworzono wspólny zapas ✓', 'ok');
+    }
+  } catch (e) {
+    setDomStatus('Brak połączenia — działa lokalnie', 'warn');
+  }
+}
+function applyDomCode(code) {
+  domCode = (code || '').trim();
+  try { localStorage.setItem(DOM_KEY, domCode); } catch (e) {}
+  domInput.value = domCode;
+  cloudLoad();
+}
+domInput.addEventListener('change', () => applyDomCode(domInput.value));
+domGenBtn.addEventListener('click', () => {
+  const code = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : ('kot-' + Date.now().toString(36));
+  applyDomCode(code);
+});
+domCopyBtn.addEventListener('click', async () => {
+  if (!domCode) { setDomStatus('Najpierw wpisz lub wygeneruj kod.', 'warn'); return; }
+  try {
+    await navigator.clipboard.writeText(domCode);
+    setDomStatus('Kod skopiowany — wyślij go domownikowi ✓', 'ok');
+  } catch (e) {
+    const ta = document.createElement('textarea'); ta.value = domCode;
+    ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.focus(); ta.select();
+    try { document.execCommand('copy'); setDomStatus('Kod skopiowany ✓', 'ok'); } catch (_) {}
+    ta.remove();
+  }
+});
+// Po powrocie do apki (np. domownik coś zmienił) — pociągnij świeży stan.
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && cloudEnabled()) cloudLoad();
+});
+cloudLoad();
+
+syncChips();
+recalc();
+</script>
+<script>
+// PWA: rejestracja service workera (offline + instalacja). Cicho ignoruje błędy
+// (np. otwarcie pliku lokalnie z file:// — wtedy SW po prostu się nie zarejestruje).
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  });
+}
+</script>
+</body>
+</html>
