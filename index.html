@@ -79,6 +79,17 @@
     border-radius: var(--radius); margin-bottom: 12px;
     box-shadow: var(--shadow);
   }
+  .tabs { display: flex; gap: 6px; margin-bottom: 14px; }
+  .tab {
+    flex: 1 1 auto; text-align: center;
+    background: var(--card); color: var(--muted);
+    border: 1.5px solid var(--line); border-radius: 11px;
+    padding: 11px 10px; font-weight: 700; font-size: 15px;
+    -webkit-tap-highlight-color: rgba(0,0,0,0.06);
+  }
+  .tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .tabpane { display: none; }
+  .tabpane.active { display: block; }
   label.head {
     display: block; font-weight: 700; margin-bottom: 4px; font-size: 1.02em;
   }
@@ -197,6 +208,12 @@
   <button type="button" id="themeBtn" class="theme-btn" title="Motyw">🖥</button>
 </h1>
 
+<div class="tabs">
+  <button type="button" class="tab active" data-tab="kalkulator">🍽 Kalkulator</button>
+  <button type="button" class="tab" data-tab="spizarnia">📦 Spiżarnia</button>
+</div>
+
+<div class="tabpane active" id="pane-kalkulator">
 <div class="card">
   <div class="goal">
     <div class="field">
@@ -244,7 +261,9 @@
   <div id="meals_out"><div class="meal-empty">—</div></div>
   <button type="button" class="copy" id="copyBtn" disabled>📋 Kopiuj plan</button>
 </div>
+</div><!-- /pane-kalkulator -->
 
+<div class="tabpane" id="pane-spizarnia">
 <div class="card">
   <label class="head">📦 Zapas (spiżarnia)</label>
   <div class="hint">Ile słoików każdego smaku masz w szafce.</div>
@@ -261,6 +280,7 @@
   <div class="sum tnum" id="zapasSum">Razem: 0 słoików</div>
   <div class="total tnum" id="zapasDni">Spiżarnia pusta.</div>
 </div>
+</div><!-- /pane-spizarnia -->
 
 <script>
 const KARMY = {
@@ -811,6 +831,24 @@ document.addEventListener('visibilitychange', () => {
   if (!document.hidden && cloudEnabled()) cloudLoad();
 });
 cloudLoad();
+
+// ── Zakładki: Kalkulator / Spiżarnia ─────────────────────────────────
+const TAB_KEY = 'karmaKota.tab';
+const tabBtns = document.querySelectorAll('.tab');
+const panes = {
+  kalkulator: document.getElementById('pane-kalkulator'),
+  spizarnia:  document.getElementById('pane-spizarnia'),
+};
+function showTab(name) {
+  if (!panes[name]) name = 'kalkulator';
+  tabBtns.forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+  for (const key in panes) panes[key].classList.toggle('active', key === name);
+  try { localStorage.setItem(TAB_KEY, name); } catch (e) {}
+}
+tabBtns.forEach(b => b.addEventListener('click', () => showTab(b.dataset.tab)));
+let savedTab = 'kalkulator';
+try { savedTab = localStorage.getItem(TAB_KEY) || 'kalkulator'; } catch (e) {}
+showTab(savedTab);
 
 syncChips();
 recalc();

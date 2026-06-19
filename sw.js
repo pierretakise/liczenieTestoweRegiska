@@ -2,7 +2,7 @@
    zawsze próbuje sieci (więc aktualizacje widać od razu), a gdy offline
    serwuje z cache. Dzięki temu nie ma problemu „nieświeżej" wersji w cache.
    Po zmianie aplikacji podbij CACHE (v1 -> v2), by wyczyścić stary cache. */
-const CACHE = 'karma-kota-v4';
+const CACHE = 'karma-kota-v5';
 const CORE = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', (e) => {
