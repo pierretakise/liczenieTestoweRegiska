@@ -2,7 +2,7 @@
    UWAGA: magazyn cache jest wspólny dla całego origin github.io, więc
    czyścimy WYŁĄCZNIE własne cache (prefiks karma-kota-beta-). Inaczej beta
    skasowałaby cache wersji produkcyjnej. Po zmianie aplikacji podbij CACHE. */
-const CACHE = 'karma-kota-beta-v1';
+const CACHE = 'karma-kota-beta-v3';
 const PREFIX = 'karma-kota-beta-';
 const CORE = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png'];
 

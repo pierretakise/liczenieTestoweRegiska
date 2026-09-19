@@ -15,6 +15,26 @@
 <link rel="apple-touch-icon" href="icon-192.png">
 <title>Karma dla kota — Cats Plate</title>
 <script>
+  // Pierwsze uruchomienie BETY: przejmij jednorazowo stan zapisany przez
+  // wersję sprzed bety (ten sam origin, inne klucze). Kopiujemy wyłącznie,
+  // gdy beta nie ma jeszcze własnego wpisu — i nigdy w drugą stronę, więc
+  // stara wersja po ewentualnym powrocie zastaje swoje dane nietknięte.
+  try {
+    var _mig = [
+      ['karmaKota.dom',      'karmaKotaBeta.dom'],
+      ['karmaKota.zapas.v1', 'karmaKotaBeta.zapas.v1'],
+      ['karmaKota.theme',    'karmaKotaBeta.theme'],
+      ['karmaKota.tab',      'karmaKotaBeta.tab'],
+    ];
+    for (var _i = 0; _i < _mig.length; _i++) {
+      if (localStorage.getItem(_mig[_i][1]) === null) {
+        var _v = localStorage.getItem(_mig[_i][0]);
+        if (_v !== null) localStorage.setItem(_mig[_i][1], _v);
+      }
+    }
+  } catch (e) {}
+</script>
+<script>
   // Motyw: zastosuj zapisany wybór jak najwcześniej (bez mignięcia przy starcie).
   // Przechowujemy preferencję (auto/light/dark); „auto" rozwiązujemy wg systemu.
   try {
@@ -404,11 +424,16 @@ for (const k of Object.keys(KARMY)) {
 function shortName(k) { return k.split(' (')[0]; }
 function fmt(n) { return n.toFixed(1).replace('.', ','); }
 
-function splitIntoMeals(plan, nMeals) {
+function splitIntoMeals(plan, nMeals, mealKcal) {
   if (nMeals < 1 || !plan.length) return [];
   const totalKcal = plan.reduce((s, p) => s + p.g * KARMY[p.karma] / 100, 0);
   if (totalKcal < 0.05) return [];
-  const target = totalKcal / nMeals;
+  // BETA: gdy pula NIE pokrywa celu (np. sama resztka słoika, bez wybranej
+  // karmy do dopełnienia), posiłek ma mieć wielkość wynikającą z CELU, a nie
+  // z tego, ile akurat zostało. Inaczej resztka rozkłada się po równo i wychodzi
+  // porcja za mała — wygląda jak zalecenie, a jest cichym racjonowaniem.
+  // Bez 3. argumentu zachowanie bez zmian (pełna zgodność z produkcją).
+  const target = (mealKcal > 0) ? mealKcal : totalKcal / nMeals;
   const queue = plan.map(p => ({karma: p.karma, g: p.g}));
   const meals = [];
   for (let i = 0; i < nMeals; i++) {
@@ -642,14 +667,19 @@ function recalc() {
   totalEl.textContent =
     `${inDay ? 'Łącznie reszta dnia' : 'Łącznie dziennie'}:  ${fmt(dailyG)} g  ·  ${fmt(dailyKcal)} kcal`;
 
+  // Czy pula (stałe porcje + ewentualne dopełnienie) pokrywa cel reszty dnia?
+  const planKcal = plan.reduce((s, p) => s + p.g * KARMY[p.karma] / 100, 0);
+  const brakKcal = (effTarget > 0) ? (effTarget - planKcal) : 0;
+  const underCover = brakKcal > 0.05;
   const mealsArr = (allServed || effMeals < 1 || !plan.length)
-    ? [] : splitIntoMeals(plan, effMeals);
+    ? [] : splitIntoMeals(plan, effMeals, underCover ? effTarget / effMeals : 0);
   renderMeals(mealsArr, served);
   updatePlanText(mealsArr, served, { target, nMeals, inDay, effMeals, allServed });
   if (typeof updateZapas === 'function') updateZapas();
   if (typeof renderBowls === 'function') {
     renderBowls(mealsArr, served, nMeals);
-    renderNow({ target, nMeals, served, allServed, fillK, nFixedRows, meals: mealsArr });
+    renderNow({ target, nMeals, served, allServed, fillK, nFixedRows,
+                underCover, brakKcal, meals: mealsArr });
   }
 }
 
@@ -930,7 +960,20 @@ openGEl.addEventListener('input', commitOpen);
 openClear.addEventListener('click', () => { setOtwarty('', 0); refreshOpenUI(); recalc(); });
 fromOpenBtn.addEventListener('click', () => {
   const o = getOtwarty();
-  if (o) addRow(o.karma, o.g, true);
+  if (!o) return;
+  // Blokada podwójnego wstawienia: ta sama resztka wciśnięta dwa razy cicho
+  // podwoiłaby pulę. Otwartego słoika NIE czyścimy — zdejmie go dopiero „podano".
+  let juzJest = false;
+  document.querySelectorAll('#rows .row').forEach(div => {
+    const g = parseFloat((div._inp.value || '').replace(',', '.'));
+    if (div._sel.value === o.karma && Math.abs(g - o.g) < 0.05) juzJest = true;
+  });
+  if (juzJest) {
+    openStatus.textContent = 'Ta resztka jest już w planie.';
+    openStatus.className = 'domStatus warn';
+    return;
+  }
+  addRow(o.karma, o.g, true);
 });
 
 // ── Rząd misek ───────────────────────────────────────────────────────
@@ -946,10 +989,12 @@ function renderBowls(meals, served, nMeals) {
   }
   meals.forEach((meal, idx) => {
     const merged = mergeMeal(meal);
+    const pusty = !merged.length;   // pula wyczerpana przed końcem dnia
     const emos = merged.map(c => emo(c.karma)).join('');
     const g = merged.reduce((sum, c) => sum + c.g, 0);
-    html += `<div class="bowl${idx === 0 ? ' next' : ''}"><span class="bno">${served + idx + 1}</span>`
-          + `<span class="bemo">${emos || '🍽'}</span><span class="bg">${fmt(g)} g</span></div>`;
+    html += `<div class="bowl${idx === 0 && !pusty ? ' next' : ''}"><span class="bno">${served + idx + 1}</span>`
+          + `<span class="bemo">${pusty ? '—' : emos}</span>`
+          + `<span class="bg">${pusty ? 'brak' : fmt(g) + ' g'}</span></div>`;
   });
   box.innerHTML = html;
   box.classList.toggle('is-hidden', !html);
@@ -970,10 +1015,50 @@ function footHtml(ctx, closed) {
        + (closed ? '' : '<button type="button" class="btn-served" id="servedBtn">🍽 podano</button>')
        + '</div>';
 }
+// ── „podano" aktualizuje otwarty słoik ───────────────────────────────
+// Decyzja Kuby 2026-09-19. Jedna operacja obsługuje oba przypadki:
+//   • posiłek bierze smak, który jest otwarty  → odejmij gramy,
+//   • posiłek bierze inny smak                 → właśnie otwarto nowy słoik,
+//     więc zapisz go jako otwarty z gramaturą JAR_G pomniejszoną o porcję.
+// Posiłek mieszany (resztka A + początek B) wychodzi z tego sam, bo to
+// dokładnie moment zmiany słoika. ŚWIADOMY WARUNEK: gramy są prawdziwe tylko
+// wtedy, gdy ktoś klika „podano". Zapas (liczba słoików) NIE jest ruszany —
+// otwarty słoik i stan spiżarni są celowo niepowiązane.
+function consumeFromJar(karma, g, c) {
+  let need = c.g;
+  if (karma === c.karma) {
+    const take = Math.min(need, g);
+    g -= take; need -= take;
+    if (g <= 0.05) { karma = null; g = 0; }
+  }
+  if (need > 0.05) {
+    const jar = JAR_G[c.karma] || 0;
+    if (jar <= 0) return { karma: karma, g: g };
+    // Porcja większa niż słoik (np. mus 100 g): liczy się resztka z OSTATNIEGO
+    // otwartego słoika, pośrednich nie śledzimy.
+    const rem = need % jar;
+    const left = (rem > 0.05) ? (jar - rem) : 0;
+    karma = (left > 0.05) ? c.karma : null;
+    g = (left > 0.05) ? left : 0;
+  }
+  return { karma: karma, g: g };
+}
+function applyMealToOpenJar(merged) {
+  const o = getOtwarty();
+  let karma = o ? o.karma : null;
+  let g = o ? o.g : 0;
+  for (const c of merged) {
+    const r = consumeFromJar(karma, g, c);
+    karma = r.karma; g = r.g;
+  }
+  setOtwarty(karma, g);
+  refreshOpenUI();
+}
 function wireFoot(ctx) {
   const b = document.getElementById('servedBtn');
   if (!b) return;
   b.addEventListener('click', () => {
+    if (ctx.meals && ctx.meals.length) applyMealToOpenJar(mergeMeal(ctx.meals[0]));
     const d = getDzien();
     const cur = d ? d.podane : Math.max(0, parseInt(servedEl.value) || 0);
     setDzien(Math.min(ctx.nMeals, cur + 1));
@@ -1046,6 +1131,11 @@ function renderNow(ctx) {
   body.innerHTML = `<div class="now-sub">Posiłek ${ctx.served + 1} z ${ctx.nMeals}</div>`
     + `<div class="now-dose">${opis}</div>`
     + `<div class="now-sub">${fmt(kcal)} kcal</div>`
+    + (ctx.underCover
+        ? `<div class="now-note warn">⚠️ Ta pula nie pokrywa reszty dnia — brakuje `
+          + `${fmt(ctx.brakKcal)} kcal. Wybierz karmę do dopełnienia, inaczej `
+          + `dalsze posiłki wyjdą niepełne.</div>`
+        : '')
     + footHtml(ctx, false);
   wireFoot(ctx);
   if (dzienStale()) showAsk(ctx);   // nie zgaduj — zapytaj raz, jednym tapnięciem
