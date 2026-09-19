@@ -18,7 +18,7 @@
   // Motyw: zastosuj zapisany wybór jak najwcześniej (bez mignięcia przy starcie).
   // Przechowujemy preferencję (auto/light/dark); „auto" rozwiązujemy wg systemu.
   try {
-    var _pref = localStorage.getItem('karmaKota.theme') || 'auto';
+    var _pref = localStorage.getItem('karmaKotaBeta.theme') || 'auto';
     var _dark = _pref === 'dark' ||
       (_pref === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches);
     document.documentElement.setAttribute('data-theme', _dark ? 'dark' : 'light');
@@ -200,11 +200,52 @@
   .meal-body { flex: 1 1 auto; }
   .meal-kcal { color: var(--muted); font-weight: 600; }
   .meal-empty { color: var(--muted); }
+
+  /* ══ BETA: karta „Teraz", miski, otwarty sloik ══════════════════════ */
+  .is-hidden { display: none !important; }
+  .beta-badge {
+    font-size: .40em; vertical-align: middle; background: var(--accent); color: #fff;
+    border-radius: 8px; padding: 3px 8px; margin-left: 8px; letter-spacing: .08em;
+  }
+  .now { border-left: 4px solid var(--accent); }
+  .now-dose { font-size: 1.45rem; font-weight: 700; line-height: 1.3; font-variant-numeric: tabular-nums; }
+  .now-sub { color: var(--muted); margin-top: 3px; }
+  .now-note { margin-top: 10px; font-size: .94rem; }
+  .now-note.warn { color: var(--warn); font-weight: 600; }
+  .now-foot { display: flex; align-items: center; gap: 12px; margin-top: 14px; flex-wrap: wrap; }
+  .now-served { color: var(--muted); font-size: .9rem; flex: 1 1 auto; }
+  .btn-served {
+    border: 0; border-radius: 11px; padding: 10px 18px; font-size: 1rem; font-weight: 600;
+    background: var(--accent); color: #fff; cursor: pointer;
+  }
+  .btn-served:active { transform: translateY(1px); }
+  .nowask { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 12px; }
+  .askq { margin-bottom: 9px; font-weight: 600; }
+  .askbtns { display: flex; gap: 8px; flex-wrap: wrap; }
+  .askb {
+    min-width: 46px; padding: 11px 15px; border-radius: 11px; border: 1.5px solid var(--line);
+    background: var(--card); color: var(--ink); font-size: 1.05rem; cursor: pointer;
+    font-variant-numeric: tabular-nums;
+  }
+  .askb.sug { border-color: var(--accent); background: var(--accent-soft); font-weight: 700; }
+  .bowls { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
+  .bowl {
+    flex: 1 1 66px; min-width: 66px; border: 1.5px solid var(--line); border-radius: 13px;
+    padding: 9px 5px; text-align: center; background: var(--card);
+  }
+  .bowl .bno { display: block; font-size: .76rem; color: var(--muted); }
+  .bowl .bemo { display: block; font-size: 1.2rem; margin: 3px 0; line-height: 1.1; }
+  .bowl .bg { display: block; font-size: .85rem; font-variant-numeric: tabular-nums; }
+  .bowl.done { opacity: .42; }
+  .bowl.next { border-color: var(--accent); background: var(--accent-soft); }
+  .openrow { display: flex; gap: 8px; align-items: center; margin-top: 6px; }
+  .openrow select { flex: 1 1 auto; min-width: 0; }
+  .openrow input { width: 88px; }
 </style>
 </head>
 <body>
 
-<h1>🐾 Karma dla kota
+<h1>🐾 Karma dla kota<span class="beta-badge">BETA</span>
   <button type="button" id="themeBtn" class="theme-btn" title="Motyw">🖥</button>
 </h1>
 
@@ -214,6 +255,15 @@
 </div>
 
 <div class="tabpane active" id="pane-kalkulator">
+<div class="card now" id="nowCard">
+  <label class="head">🐾 Teraz</label>
+  <div id="nowBody"><div class="now-sub">—</div></div>
+  <div class="nowask is-hidden" id="nowAsk">
+    <div class="askq">Ile posiłków kot już dziś dostał?</div>
+    <div class="askbtns" id="askBtns"></div>
+  </div>
+</div>
+
 <div class="card">
   <div class="goal">
     <div class="field">
@@ -238,6 +288,7 @@
   <div class="hint">Resztki słoików / znana ilość. Pomiń, jeśli wszystko ma być z jednej karmy.</div>
   <div id="rows"></div>
   <button class="add" onclick="addRow()">+ Dodaj porcję</button>
+  <button type="button" class="add is-hidden" id="fromOpenBtn"></button>
   <div class="sum tnum" id="staleSum">Razem stałe:  0 g  ·  0 kcal</div>
 </div>
 
@@ -258,6 +309,7 @@
 <div class="card">
   <label class="head">🍽 Plan posiłków</label>
   <div class="hint">Posiłki równe kalorycznie. Słoiki w kolejności wierszy (strzałkami zmieniasz kolejność).</div>
+  <div class="bowls is-hidden" id="bowls"></div>
   <div id="meals_out"><div class="meal-empty">—</div></div>
   <button type="button" class="copy" id="copyBtn" disabled>📋 Kopiuj plan</button>
 </div>
@@ -276,6 +328,15 @@
     </div>
     <div class="domStatus" id="domStatus">Tryb lokalny — wpisz lub wygeneruj kod, by współdzielić z domownikiem.</div>
   </div>
+  <div class="dom">
+    <label class="domlabel" for="openKarma">🫙 Otwarty słoik</label>
+    <div class="openrow">
+      <select id="openKarma"></select>
+      <input type="number" id="openG" class="tnum" min="0" step="0.1" inputmode="decimal" placeholder="g">
+      <button type="button" class="move" id="openClear" title="Wyczyść">Wyczyść</button>
+    </div>
+    <div class="domStatus" id="openStatus">Brak otwartego słoika.</div>
+  </div>
   <div id="zapas"></div>
   <div class="sum tnum" id="zapasSum">Razem: 0 słoików</div>
   <div class="total tnum" id="zapasDni">Spiżarnia pusta.</div>
@@ -286,6 +347,7 @@
 const KARMY = {
   "Cats Plate Beef (wołowina)":         110,
   "Cats Plate Duck (kaczka)":           107,
+  "Cats Plate Duck Mousse (kaczka)":    161,
   "Cats Plate Goose Mousse (gęś)":      151,
   "Cats Plate Horse (konina)":          132,
   "Cats Plate Lamb (jagnięcina)":       120,
@@ -302,6 +364,7 @@ const KARMY = {
 const EMOJI = {
   "Cats Plate Beef (wołowina)":       "🥩",
   "Cats Plate Duck (kaczka)":         "🦆",
+  "Cats Plate Duck Mousse (kaczka)":  "🦆",
   "Cats Plate Goose Mousse (gęś)":    "🦢",
   "Cats Plate Horse (konina)":        "🐴",
   "Cats Plate Lamb (jagnięcina)":     "🐑",
@@ -319,6 +382,7 @@ function emo(k) { return EMOJI[k] || "🍽"; }
 const JAR_G = {
   "Cats Plate Beef (wołowina)":         360,
   "Cats Plate Duck (kaczka)":           360,
+  "Cats Plate Duck Mousse (kaczka)":    100,
   "Cats Plate Goose Mousse (gęś)":      100,
   "Cats Plate Horse (konina)":          180,
   "Cats Plate Lamb (jagnięcina)":       360,
@@ -534,6 +598,7 @@ function recalc() {
     }
   });
 
+  const nFixedRows = plan.length;   // przed dorzuceniem dopelnienia
   const sumG = plan.reduce((s, p) => s + p.g, 0);
   const sumKcal = plan.reduce((s, p) => s + p.g * KARMY[p.karma] / 100, 0);
 
@@ -582,6 +647,10 @@ function recalc() {
   renderMeals(mealsArr, served);
   updatePlanText(mealsArr, served, { target, nMeals, inDay, effMeals, allServed });
   if (typeof updateZapas === 'function') updateZapas();
+  if (typeof renderBowls === 'function') {
+    renderBowls(mealsArr, served, nMeals);
+    renderNow({ target, nMeals, served, allServed, fillK, nFixedRows, meals: mealsArr });
+  }
 }
 
 // Szybki wybór celu kcal — chipsy wpisują wartość, pole nadal przyjmuje dowolną liczbę.
@@ -604,11 +673,11 @@ function syncChips() {
 
 targetEl.addEventListener('input', () => { syncChips(); recalc(); });
 document.getElementById('meals').addEventListener('input', recalc);
-document.getElementById('served').addEventListener('input', recalc);
+document.getElementById('served').addEventListener('input', () => { onServedManual(); recalc(); });
 fillSel.addEventListener('change', recalc);
 
 // ── Motyw: cykl auto → jasny → ciemny ────────────────────────────────
-const THEME_KEY = 'karmaKota.theme';
+const THEME_KEY = 'karmaKotaBeta.theme';
 const THEME_CYCLE = ['auto', 'light', 'dark'];
 const THEME_ICON = { auto: '🖥', light: '🌞', dark: '🌙' };
 const THEME_NAME = { auto: 'systemowy', light: 'jasny', dark: 'ciemny' };
@@ -656,7 +725,7 @@ copyBtn.addEventListener('click', async () => {
 // ── Zapas (spiżarnia) — ile słoików czego mamy. ──────────────────────
 // Pamięć lokalna (cache offline) + opcjonalna synchronizacja z domownikiem
 // przez Supabase (gdy ustawiony „kod gospodarstwa" — patrz blok chmury niżej).
-const ZAPAS_KEY = 'karmaKota.zapas.v1';
+const ZAPAS_KEY = 'karmaKotaBeta.zapas.v1';
 const zapasBox = document.getElementById('zapas');
 const zapasSumEl = document.getElementById('zapasSum');
 const zapasDniEl = document.getElementById('zapasDni');
@@ -731,12 +800,273 @@ for (const k of Object.keys(KARMY)) {
 }
 updateZapas();
 
+
+// ══════════════════════════════════════════════════════════════════════════
+// BETA — karta „Teraz", wspólny licznik posiłków, otwarty słoik, miski
+// ══════════════════════════════════════════════════════════════════════════
+// Dane bety jadą w TYM SAMYM rekordzie chmury co zapas, pod kluczami
+// zarezerwowanymi (prefiks „__"). Produkcyjna wersja iteruje wyłącznie po
+// kluczach KARMY, więc te pola ignoruje przy odczycie i zachowuje przy
+// zapisie — stara aplikacja działa dalej bez żadnej zmiany.
+const K_DZIEN   = '__dzien';      // {data:'RRRR-MM-DD', podane:N, ts:ISO}
+const K_OTWARTY = '__otwarty';    // {karma, g, ts}
+const STALE_MS  = 3 * 60 * 60 * 1000;   // po tylu godzinach licznik = niepewny
+const OKNO_OD = 7, OKNO_DO = 22;        // okno karmienia — tylko do podpowiedzi
+
+function todayStr() {
+  const d = new Date(), p = (n) => String(n).padStart(2, '0');
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+}
+function hhmm(iso) {
+  const t = Date.parse(iso || '');
+  if (!t) return '';
+  const d = new Date(t);
+  return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+}
+
+// ── Wspólny licznik podanych posiłków ────────────────────────────────
+// Licznik z innego dnia jest bezwartościowy — traktujemy go jak brak,
+// więc po północy karta sama wraca do stanu „nikt jeszcze nie karmił".
+function getDzien() {
+  const d = zapasData[K_DZIEN];
+  if (!d || typeof d !== 'object' || d.data !== todayStr()) return null;
+  return { podane: Math.max(0, parseInt(d.podane) || 0), ts: d.ts };
+}
+function setDzien(podane) {
+  zapasData[K_DZIEN] = {
+    data: todayStr(),
+    podane: Math.max(0, parseInt(podane) || 0),
+    ts: new Date().toISOString(),
+  };
+  saveZapas(); scheduleCloudSave();
+}
+function dzienStale() {
+  const d = getDzien();
+  if (!d) return true;
+  const t = Date.parse(d.ts || '');
+  return !t || (Date.now() - t) > STALE_MS;
+}
+// Podpowiedź (nie ustawienie!) — ile posiłków zwykle wypada o tej porze.
+function sugestiaPodanych(nMeals) {
+  if (!(nMeals >= 1)) return 0;
+  const now = new Date(), h = now.getHours() + now.getMinutes() / 60;
+  if (h <= OKNO_OD) return 0;
+  if (h >= OKNO_DO) return nMeals;
+  return Math.min(nMeals, Math.max(0, Math.floor((h - OKNO_OD) / ((OKNO_DO - OKNO_OD) / nMeals))));
+}
+
+const servedEl = document.getElementById('served');
+function onServedManual() { setDzien(Math.max(0, parseInt(servedEl.value) || 0)); }
+function syncServedFromDzien() {
+  const d = getDzien(), v = d ? d.podane : 0;
+  servedEl.value = v > 0 ? v : '';
+}
+
+// ── Otwarty słoik — most między Spiżarnią a Kalkulatorem ─────────────
+// To NIE jest automatyczne odejmowanie zapasu (świadomie odrzucone).
+// To jeden, ręcznie prowadzony licznik aktualnie napoczętego słoika.
+function getOtwarty() {
+  const o = zapasData[K_OTWARTY];
+  if (!o || typeof o !== 'object' || !KARMY[o.karma]) return null;
+  const g = Number(o.g);
+  return (g > 0) ? { karma: o.karma, g: g, ts: o.ts } : null;
+}
+function setOtwarty(karma, g) {
+  if (karma && KARMY[karma] && g > 0) {
+    zapasData[K_OTWARTY] = { karma: karma, g: Number(g), ts: new Date().toISOString() };
+  } else {
+    delete zapasData[K_OTWARTY];
+  }
+  saveZapas(); scheduleCloudSave();
+}
+
+const openSel    = document.getElementById('openKarma');
+const openGEl    = document.getElementById('openG');
+const openStatus = document.getElementById('openStatus');
+const openClear  = document.getElementById('openClear');
+const fromOpenBtn = document.getElementById('fromOpenBtn');
+
+(function buildOpenSelect() {
+  const empty = document.createElement('option');
+  empty.value = ''; empty.textContent = '— brak otwartego —';
+  openSel.appendChild(empty);
+  for (const k of Object.keys(KARMY)) {
+    const o = document.createElement('option');
+    o.value = k; o.textContent = emo(k) + '  ' + shortName(k);
+    openSel.appendChild(o);
+  }
+})();
+
+function refreshOpenUI() {
+  const o = getOtwarty();
+  openSel.value = o ? o.karma : '';
+  openGEl.value = o ? o.g : '';
+  if (o) {
+    const kcal = o.g * KARMY[o.karma] / 100;
+    openStatus.textContent = `${emo(o.karma)} ${shortName(o.karma)} — zostało ${fmt(o.g)} g · ${fmt(kcal)} kcal`
+      + (o.ts ? ` (aktualizacja ${hhmm(o.ts)})` : '');
+    openStatus.className = 'domStatus ok';
+    fromOpenBtn.textContent = `↪ Wstaw resztkę: ${emo(o.karma)} ${fmt(o.g)} g ${shortName(o.karma)}`;
+    fromOpenBtn.classList.remove('is-hidden');
+  } else {
+    openStatus.textContent = 'Brak otwartego słoika. Wybierz smak i wpisz, ile w nim zostało.';
+    openStatus.className = 'domStatus';
+    fromOpenBtn.classList.add('is-hidden');
+  }
+}
+function commitOpen() {
+  const k = openSel.value;
+  const g = parseFloat((openGEl.value || '').replace(',', '.'));
+  if (!k) { setOtwarty('', 0); refreshOpenUI(); recalc(); return; }
+  if (!(g > 0)) {
+    openStatus.textContent = 'Wpisz, ile gramów zostało w otwartym słoiku.';
+    openStatus.className = 'domStatus warn';
+    return;   // bez odświeżania — inaczej wybór smaku by się zresetował
+  }
+  setOtwarty(k, g); refreshOpenUI(); recalc();
+}
+openSel.addEventListener('change', commitOpen);
+openGEl.addEventListener('input', commitOpen);
+openClear.addEventListener('click', () => { setOtwarty('', 0); refreshOpenUI(); recalc(); });
+fromOpenBtn.addEventListener('click', () => {
+  const o = getOtwarty();
+  if (o) addRow(o.karma, o.g, true);
+});
+
+// ── Rząd misek ───────────────────────────────────────────────────────
+function renderBowls(meals, served, nMeals) {
+  const box = document.getElementById('bowls');
+  if (!(nMeals >= 1) || (!meals.length && served <= 0)) {
+    box.innerHTML = ''; box.classList.add('is-hidden'); return;
+  }
+  let html = '';
+  for (let i = 0; i < served && i < nMeals; i++) {
+    html += `<div class="bowl done"><span class="bno">${i + 1}</span>`
+          + `<span class="bemo">✓</span><span class="bg">podany</span></div>`;
+  }
+  meals.forEach((meal, idx) => {
+    const merged = mergeMeal(meal);
+    const emos = merged.map(c => emo(c.karma)).join('');
+    const g = merged.reduce((sum, c) => sum + c.g, 0);
+    html += `<div class="bowl${idx === 0 ? ' next' : ''}"><span class="bno">${served + idx + 1}</span>`
+          + `<span class="bemo">${emos || '🍽'}</span><span class="bg">${fmt(g)} g</span></div>`;
+  });
+  box.innerHTML = html;
+  box.classList.toggle('is-hidden', !html);
+}
+
+// ── Karta „Teraz" — dwie twarze ──────────────────────────────────────
+// PROSTY dzień (jeden smak, brak resztek): porcja jest STAŁA przez cały
+// dzień, bo posiłki są równe kalorycznie. Licznik podanych nie wpływa na
+// wynik, więc karta o nic nie pyta — ma być poprawna, gdy nikt jej nie dotyka.
+// ZŁOŻONY dzień (resztki / zmiana słoika / mix): kolejne posiłki się różnią,
+// więc dopiero tu licznik ma znaczenie i dopiero tu warto o niego zapytać.
+function footHtml(ctx, closed) {
+  const d = getDzien();
+  const info = d
+    ? `Podane dziś: ${d.podane} z ${ctx.nMeals}` + (d.ts ? ` · potwierdzone ${hhmm(d.ts)}` : '')
+    : 'Podane dziś: brak potwierdzenia';
+  return `<div class="now-foot"><span class="now-served">${info}</span>`
+       + (closed ? '' : '<button type="button" class="btn-served" id="servedBtn">🍽 podano</button>')
+       + '</div>';
+}
+function wireFoot(ctx) {
+  const b = document.getElementById('servedBtn');
+  if (!b) return;
+  b.addEventListener('click', () => {
+    const d = getDzien();
+    const cur = d ? d.podane : Math.max(0, parseInt(servedEl.value) || 0);
+    setDzien(Math.min(ctx.nMeals, cur + 1));
+    syncServedFromDzien();
+    recalc();
+  });
+}
+function showAsk(ctx) {
+  const ask = document.getElementById('nowAsk');
+  const box = document.getElementById('askBtns');
+  const sug = sugestiaPodanych(ctx.nMeals);
+  box.innerHTML = '';
+  for (let i = 0; i <= ctx.nMeals; i++) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'askb' + (i === sug ? ' sug' : '');
+    b.textContent = i;
+    b.addEventListener('click', () => { setDzien(i); syncServedFromDzien(); recalc(); });
+    box.appendChild(b);
+  }
+  ask.classList.remove('is-hidden');
+}
+function renderNow(ctx) {
+  const body = document.getElementById('nowBody');
+  const ask = document.getElementById('nowAsk');
+  ask.classList.add('is-hidden');
+
+  if (!(ctx.target > 0) || !(ctx.nMeals >= 1)) {
+    body.innerHTML = '<div class="now-sub">Wpisz cel kcal i liczbę posiłków.</div>';
+    return;
+  }
+  if (ctx.allServed) {
+    body.innerHTML = '<div class="now-dose">✓ Dzień zamknięty</div>'
+      + `<div class="now-sub">Wszystkie ${ctx.nMeals} posiłki już podane.</div>`
+      + footHtml(ctx, true);
+    return;
+  }
+
+  // ── Twarz 1: dzień prosty ──
+  if (ctx.nFixedRows === 0 && ctx.fillK && KARMY[ctx.fillK]) {
+    const gMeal = (ctx.target / ctx.nMeals) / KARMY[ctx.fillK] * 100;
+    const gDay  = ctx.target / KARMY[ctx.fillK] * 100;
+    const o = getOtwarty();
+    let note = '<div class="now-note">Jeden smak przez cały dzień — ta porcja jest taka sama o każdej porze.</div>';
+    if (o && o.karma === ctx.fillK) {
+      if (o.g + 0.05 < gDay) {
+        const ile = Math.floor(o.g / gMeal);
+        note = `<div class="now-note warn">🫙 W otwartym słoiku zostało ${fmt(o.g)} g — starczy na `
+             + `${ile} ${ile === 1 ? 'posiłek' : 'posiłki'}, potem zmiana słoika.</div>`;
+      } else {
+        note = `<div class="now-note">🫙 Otwarty słoik (${fmt(o.g)} g) starczy na cały dzień.</div>`;
+      }
+    }
+    body.innerHTML = `<div class="now-dose">${emo(ctx.fillK)} ${fmt(gMeal)} g na posiłek</div>`
+      + `<div class="now-sub">${shortName(ctx.fillK)} · ${ctx.nMeals} posiłki · `
+      + `${fmt(ctx.target)} kcal · razem ${fmt(gDay)} g</div>`
+      + note + footHtml(ctx, false);
+    wireFoot(ctx);
+    return;
+  }
+
+  // ── Twarz 2: dzień złożony ──
+  if (!ctx.meals.length) {
+    body.innerHTML = '<div class="now-sub">Uzupełnij porcje albo wybierz karmę do dopełnienia.</div>';
+    return;
+  }
+  const next = mergeMeal(ctx.meals[0]);
+  const opis = next.map(c => `${emo(c.karma)} ${fmt(c.g)} g ${shortName(c.karma)}`).join(' + ');
+  const kcal = next.reduce((sum, c) => sum + c.kcal, 0);
+  body.innerHTML = `<div class="now-sub">Posiłek ${ctx.served + 1} z ${ctx.nMeals}</div>`
+    + `<div class="now-dose">${opis}</div>`
+    + `<div class="now-sub">${fmt(kcal)} kcal</div>`
+    + footHtml(ctx, false);
+  wireFoot(ctx);
+  if (dzienStale()) showAsk(ctx);   // nie zgaduj — zapytaj raz, jednym tapnięciem
+}
+
+// Po przyjęciu stanu z chmury (adoptCloud) odśwież też widoki bety.
+function betaAfterAdopt() {
+  syncServedFromDzien();
+  refreshOpenUI();
+  recalc();
+}
+
+syncServedFromDzien();
+refreshOpenUI();
+
 // ── Wspólny zapas między domownikami (Supabase, czysty fetch — bez biblioteki) ──
 // Klucz anon jest PUBLICZNY z założenia; ochronę robi schemat (RLS + funkcje
 // filtrujące po kodzie). Pusty „kod gospodarstwa" = tryb lokalny (jak dotąd).
 const SB_URL = 'https://crclqrunjepjpjgaxzjp.supabase.co';
 const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNyY2xxcnVuamVwanBqZ2F4empwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE4NjIyMTcsImV4cCI6MjA5NzQzODIxN30.OsVtBRffKaLrN3qa--B_3EzplytL2X9CwI6zWMvE04U';
-const DOM_KEY = 'karmaKota.dom';
+const DOM_KEY = 'karmaKotaBeta.dom';
 const domInput = document.getElementById('domKod');
 const domStatusEl = document.getElementById('domStatus');
 const domGenBtn = document.getElementById('domGen');
@@ -755,7 +1085,17 @@ function refreshZapasInputs() {
     if (zapasInputs[k]) zapasInputs[k].value = (Number(zapasData[k]) > 0) ? zapasData[k] : '';
   }
   updateZapas();
+  if (typeof betaAfterAdopt === 'function') betaAfterAdopt();
 }
+// ── Optimistic concurrency (compare-and-swap) ──
+// lastUpdatedAt = wersja stanu, na której bazujemy (znacznik z serwera).
+//   Trzymana TYLKO w pamięci — świeży start karty = null = nie znamy wersji.
+// cloudLoaded = czy w tej sesji udało się pobrać/utworzyć stan.
+//   Bez tego NIE wypychamy — chroni przed nadpisaniem przez kartę,
+//   która nie zdążyła się zsynchronizować (np. wybudzona po dniach w tle).
+let lastUpdatedAt = null;
+let cloudLoaded = false;
+
 async function cloudGet(code) {
   const r = await fetch(`${SB_URL}/rest/v1/rpc/karma_get`, {
     method: 'POST',
@@ -763,24 +1103,52 @@ async function cloudGet(code) {
     body: JSON.stringify({ p_code: code }),
   });
   if (!r.ok) throw new Error('HTTP ' + r.status);
-  return await r.json();
+  const j = await r.json();
+  // Nowy format = koperta {data, updated_at}. Stary (kompatybilność) = goła mapa / null.
+  if (j && typeof j === 'object' && ('data' in j) && ('updated_at' in j)) {
+    return { data: j.data, updatedAt: j.updated_at };
+  }
+  return { data: j, updatedAt: null };
 }
 async function cloudSet(code, data) {
   const r = await fetch(`${SB_URL}/rest/v1/rpc/karma_set`, {
     method: 'POST',
     headers: { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ p_code: code, p_data: data }),
+    // p_prev_updated_at = nasza baza; serwer odrzuci, jeśli w chmurze jest nowszy stan.
+    body: JSON.stringify({ p_code: code, p_data: data, p_prev_updated_at: lastUpdatedAt }),
   });
   if (!r.ok) throw new Error('HTTP ' + r.status);
+  try { return await r.json(); } catch (e) { return null; }  // stary serwer (void) → null
+}
+// Przyjmij stan z serwera (po konflikcie / świeżym pobraniu) bez nadpisywania.
+function adoptCloud(data, updatedAt) {
+  if (data && typeof data === 'object') { zapasData = data; saveZapas(); refreshZapasInputs(); }
+  if (updatedAt !== undefined) lastUpdatedAt = updatedAt;
 }
 let cloudSaveTimer = null;
 function scheduleCloudSave() {
   if (!cloudEnabled()) return;
+  // Nie wypychaj, dopóki nie znamy aktualnej wersji z chmury — inaczej
+  // ślepy zapis mógłby cofnąć świeży stan domownika.
+  if (!cloudLoaded) { setDomStatus('Czekam na synchronizację przed zapisem…', 'warn'); return; }
   setDomStatus('Zapisywanie…');
   clearTimeout(cloudSaveTimer);
   cloudSaveTimer = setTimeout(async () => {
-    try { await cloudSet(domCode, zapasData); setDomStatus('Zsynchronizowano ✓', 'ok'); }
-    catch (e) { setDomStatus('Offline — zapis lokalny, zsynchronizuje przy połączeniu', 'warn'); }
+    try {
+      const res = await cloudSet(domCode, zapasData);
+      if (res && res.ok) {
+        lastUpdatedAt = res.updated_at || lastUpdatedAt;
+        setDomStatus('Zsynchronizowano ✓', 'ok');
+      } else if (res && res.conflict) {
+        // Ktoś zapisał nowszy stan — przyjmujemy go zamiast nadpisywać.
+        adoptCloud(res.data, res.updated_at);
+        setDomStatus('Zapas zmieniony na innym urządzeniu — wczytano najnowszy stan', 'warn');
+      } else {
+        setDomStatus('Zsynchronizowano ✓', 'ok');  // stary serwer (void)
+      }
+    } catch (e) {
+      setDomStatus('Offline — zapis lokalny, zsynchronizuje przy połączeniu', 'warn');
+    }
   }, 700);
 }
 async function cloudLoad() {
@@ -790,15 +1158,28 @@ async function cloudLoad() {
   }
   setDomStatus('Ładowanie wspólnego zapasu…');
   try {
-    const data = await cloudGet(domCode);
-    if (data && typeof data === 'object') {
-      zapasData = data; saveZapas(); refreshZapasInputs();
+    const res = await cloudGet(domCode);
+    if (res.data && typeof res.data === 'object') {
+      adoptCloud(res.data, res.updatedAt);
+      cloudLoaded = true;
       setDomStatus('Zsynchronizowano ✓', 'ok');
     } else {
-      await cloudSet(domCode, zapasData);   // nowy kod → wgraj bieżący zapas
-      setDomStatus('Utworzono wspólny zapas ✓', 'ok');
+      // Brak wiersza → utwórz z bieżącego lokalnego (prev=null; serwer wstawi).
+      const created = await cloudSet(domCode, zapasData);
+      if (created && created.ok) {
+        lastUpdatedAt = created.updated_at || null;
+        setDomStatus('Utworzono wspólny zapas ✓', 'ok');
+      } else if (created && created.conflict) {
+        adoptCloud(created.data, created.updated_at);
+        setDomStatus('Zsynchronizowano ✓', 'ok');
+      } else {
+        setDomStatus('Utworzono wspólny zapas ✓', 'ok');  // stary serwer
+      }
+      cloudLoaded = true;
     }
   } catch (e) {
+    // Nieudane pobranie = nie znamy wersji → blokuj wypychanie do czasu udanego load.
+    cloudLoaded = false; lastUpdatedAt = null;
     setDomStatus('Brak połączenia — działa lokalnie', 'warn');
   }
 }
@@ -806,6 +1187,7 @@ function applyDomCode(code) {
   domCode = (code || '').trim();
   try { localStorage.setItem(DOM_KEY, domCode); } catch (e) {}
   domInput.value = domCode;
+  cloudLoaded = false; lastUpdatedAt = null;   // nowy kod = nowa wersja
   cloudLoad();
 }
 domInput.addEventListener('change', () => applyDomCode(domInput.value));
@@ -826,14 +1208,20 @@ domCopyBtn.addEventListener('click', async () => {
     ta.remove();
   }
 });
-// Po powrocie do apki (np. domownik coś zmienił) — pociągnij świeży stan.
+// Po powrocie do apki (np. domownik coś zmienił) — pociągnij świeży stan
+// PRZED jakimkolwiek zapisem (cloudLoad ustawia świeże lastUpdatedAt/cloudLoaded).
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden && cloudEnabled()) cloudLoad();
+});
+// bfcache (iOS Safari potrafi przywrócić stronę bez przeładowania i bez
+// visibilitychange) — wymuś ponowną synchronizację przy przywróceniu.
+window.addEventListener('pageshow', (e) => {
+  if (e.persisted && cloudEnabled()) cloudLoad();
 });
 cloudLoad();
 
 // ── Zakładki: Kalkulator / Spiżarnia ─────────────────────────────────
-const TAB_KEY = 'karmaKota.tab';
+const TAB_KEY = 'karmaKotaBeta.tab';
 const tabBtns = document.querySelectorAll('.tab');
 const panes = {
   kalkulator: document.getElementById('pane-kalkulator'),
